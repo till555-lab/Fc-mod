@@ -1,0 +1,17 @@
+{
+  "itemGroup.femboycompanion": "Femboy Companion",
+  "entity.femboycompanion.femboy": "Фембой",
+  "item.femboycompanion.white_femboy_spawn_egg": "Яйцо призыва белого фембоя",
+  "item.femboycompanion.black_femboy_spawn_egg": "Яйцо призыва чёрного фембоя",
+  "item.femboycompanion.white_ears": "Белые ушки фембоя",
+  "item.femboycompanion.white_tail": "Белый хвост фембоя",
+  "item.femboycompanion.white_paws": "Белые лапки фембоя",
+  "item.femboycompanion.black_ears": "Чёрные ушки фембоя",
+  "item.femboycompanion.black_tail": "Чёрный хвост фембоя",
+  "item.femboycompanion.black_paws": "Чёрные лапки фембоя",
+  "message.femboycompanion.gift": "Фембой: Держи!",
+  "message.femboycompanion.refuse1": "Фембой: Пока хватит.",
+  "message.femboycompanion.refuse2": "Фембой: Я сказал нет!",
+  "message.femboycompanion.refuse3": "Фембой топает ногой. Прекрати.",
+  "message.femboycompanion.angry": "Фембой злится и не обращает на тебя внимания."
+}
