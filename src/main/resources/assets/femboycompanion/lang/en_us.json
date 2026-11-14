@@ -1,6 +1,8 @@
 {
   "itemGroup.femboycompanion": "Femboy Companion",
   "entity.femboycompanion.femboy": "Femboy",
+  "entity.femboycompanion.femboy_white": "White Femboy",
+  "entity.femboycompanion.femboy_black": "Black Femboy",
   "item.femboycompanion.white_femboy_spawn_egg": "White Femboy Spawn Egg",
   "item.femboycompanion.black_femboy_spawn_egg": "Black Femboy Spawn Egg",
   "item.femboycompanion.white_ears": "White Femboy Ears",
@@ -12,6 +14,11 @@
   "message.femboycompanion.gift": "Femboy: Here, take this!",
   "message.femboycompanion.refuse1": "Femboy: No more for now.",
   "message.femboycompanion.refuse2": "Femboy: I said no!",
-  "message.femboycompanion.refuse3": "The femboy stomps his foot. Stop it.",
-  "message.femboycompanion.angry": "The femboy is angry and ignores you."
+  "message.femboycompanion.refuse3": "Femboy: This is your last warning!",
+  "message.femboycompanion.angry_start": "The femboy pulls out a wooden sword!",
+  "message.femboycompanion.angry": "The femboy is angry and does not listen to you.",
+  "message.femboycompanion.ignore": "Femboy: Get lost, you annoy me.",
+  "message.femboycompanion.placate": "The femboy takes your offering. Anger left: %s%%",
+  "message.femboycompanion.calm": "The femboy calms down.",
+  "message.femboycompanion.distrust": "Femboy: You hurt one of us. I will not trade with you."
 }

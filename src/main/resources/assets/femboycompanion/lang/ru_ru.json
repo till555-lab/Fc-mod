@@ -1,6 +1,8 @@
 {
   "itemGroup.femboycompanion": "Femboy Companion",
   "entity.femboycompanion.femboy": "Фембой",
+  "entity.femboycompanion.femboy_white": "Белый фембой",
+  "entity.femboycompanion.femboy_black": "Чёрный фембой",
   "item.femboycompanion.white_femboy_spawn_egg": "Яйцо призыва белого фембоя",
   "item.femboycompanion.black_femboy_spawn_egg": "Яйцо призыва чёрного фембоя",
   "item.femboycompanion.white_ears": "Белые ушки фембоя",
@@ -12,6 +14,11 @@
   "message.femboycompanion.gift": "Фембой: Держи!",
   "message.femboycompanion.refuse1": "Фембой: Пока хватит.",
   "message.femboycompanion.refuse2": "Фембой: Я сказал нет!",
-  "message.femboycompanion.refuse3": "Фембой топает ногой. Прекрати.",
-  "message.femboycompanion.angry": "Фембой злится и не обращает на тебя внимания."
+  "message.femboycompanion.refuse3": "Фембой: Это твоё последнее предупреждение!",
+  "message.femboycompanion.angry_start": "Фембой достаёт деревянный меч!",
+  "message.femboycompanion.angry": "Фембой злится и не слушает тебя.",
+  "message.femboycompanion.ignore": "Фембой: Отстань, ты меня бесишь.",
+  "message.femboycompanion.placate": "Фембой берёт угощение. Осталось злости: %s%%",
+  "message.femboycompanion.calm": "Фембой успокоился.",
+  "message.femboycompanion.distrust": "Фембой: Ты обидел одного из нас. Я с тобой торговать не буду."
 }

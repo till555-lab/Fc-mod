@@ -4,13 +4,17 @@ import com.femboycompanion.entity.FemboyEntity;
 import com.femboycompanion.registry.ModEntities;
 import com.femboycompanion.registry.ModItems;
 
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityClassification;
 import net.minecraft.entity.EntitySpawnPlacementRegistry;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.biome.MobSpawnInfo;
 import net.minecraft.world.gen.Heightmap;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.entity.EntityAttributeCreationEvent;
+import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.world.BiomeLoadingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.common.Mod;
@@ -31,6 +35,7 @@ public class FemboyCompanion {
         bus.addListener(this::onAttributes);
         bus.addListener(this::onCommonSetup);
         MinecraftForge.EVENT_BUS.addListener(this::onBiomeLoading);
+        MinecraftForge.EVENT_BUS.addListener(this::onLivingDeath);
         LOGGER.info("Femboy Companion loaded");
     }
 
@@ -53,5 +58,25 @@ public class FemboyCompanion {
         }
         event.getSpawns().getSpawner(EntityClassification.CREATURE)
                 .add(new MobSpawnInfo.Spawners(ModEntities.FEMBOY.get(), 6, 2, 4));
+    }
+
+    private void onLivingDeath(LivingDeathEvent event) {
+        if (!(event.getEntity() instanceof FemboyEntity)) {
+            return;
+        }
+        Entity killer = event.getSource().getEntity();
+        if (!(killer instanceof PlayerEntity)) {
+            return;
+        }
+        FemboyEntity dead = (FemboyEntity) event.getEntity();
+        if (dead.level.isClientSide) {
+            return;
+        }
+        AxisAlignedBB area = dead.getBoundingBox().inflate(16.0D);
+        for (FemboyEntity witness : dead.level.getEntitiesOfClass(FemboyEntity.class, area)) {
+            if (witness != dead) {
+                witness.distrust(killer.getUUID(), dead.level.getGameTime() + 72000L);
+            }
+        }
     }
 }

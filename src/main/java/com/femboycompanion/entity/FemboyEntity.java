@@ -1,6 +1,9 @@
 package com.femboycompanion.entity;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
+import java.util.UUID;
 import javax.annotation.Nullable;
 
 import com.femboycompanion.registry.ModItems;
@@ -19,20 +22,24 @@ import net.minecraft.entity.ai.goal.SwimGoal;
 import net.minecraft.entity.ai.goal.WaterAvoidingRandomWalkingGoal;
 import net.minecraft.entity.item.ItemEntity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.inventory.EquipmentSlotType;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.nbt.CompoundNBT;
+import net.minecraft.nbt.ListNBT;
 import net.minecraft.network.IPacket;
 import net.minecraft.network.datasync.DataParameter;
 import net.minecraft.network.datasync.DataSerializers;
 import net.minecraft.network.datasync.EntityDataManager;
+import net.minecraft.tags.ItemTags;
 import net.minecraft.util.ActionResultType;
 import net.minecraft.util.DamageSource;
 import net.minecraft.util.Hand;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.vector.Vector3d;
+import net.minecraft.util.text.ITextComponent;
 import net.minecraft.util.text.TranslationTextComponent;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.DifficultyInstance;
@@ -44,16 +51,23 @@ import net.minecraftforge.fml.network.NetworkHooks;
 public class FemboyEntity extends CreatureEntity {
     public static final int VARIANT_WHITE = 0;
     public static final int VARIANT_BLACK = 1;
+    public static final int COAT_COUNT = 8;
 
     private static final DataParameter<Integer> VARIANT =
+            EntityDataManager.defineId(FemboyEntity.class, DataSerializers.INT);
+    private static final DataParameter<Integer> COAT =
             EntityDataManager.defineId(FemboyEntity.class, DataSerializers.INT);
 
     private int giftLimit;
     private int giftsGiven;
     private int refusals;
     private int angerTicks;
+    private boolean ignoring;
+    private int ignoreClicks;
+    private int calmPoints;
     private long limitResetTime = -1L;
     private int lastInteractTick = -100;
+    private final Map<UUID, Long> distrusted = new HashMap<>();
 
     public FemboyEntity(EntityType<? extends FemboyEntity> type, World world) {
         super(type, world);
@@ -65,7 +79,7 @@ public class FemboyEntity extends CreatureEntity {
                 .add(Attributes.MAX_HEALTH, 24.0D)
                 .add(Attributes.MOVEMENT_SPEED, 0.25D)
                 .add(Attributes.ARMOR, 1.0D)
-                .add(Attributes.ATTACK_DAMAGE, 2.0D)
+                .add(Attributes.ATTACK_DAMAGE, 1.0D)
                 .add(Attributes.FOLLOW_RANGE, 24.0D);
     }
 
@@ -88,6 +102,7 @@ public class FemboyEntity extends CreatureEntity {
     protected void defineSynchedData() {
         super.defineSynchedData();
         this.entityData.define(VARIANT, VARIANT_WHITE);
+        this.entityData.define(COAT, 0);
     }
 
     public int getVariant() {
@@ -98,29 +113,70 @@ public class FemboyEntity extends CreatureEntity {
         this.entityData.set(VARIANT, variant);
     }
 
+    public int getCoat() {
+        return this.entityData.get(COAT);
+    }
+
+    public void setCoat(int coat) {
+        this.entityData.set(COAT, coat);
+    }
+
+    public ITextComponent getTypeName() {
+        String key = this.getVariant() == VARIANT_BLACK
+                ? "entity.femboycompanion.femboy_black"
+                : "entity.femboycompanion.femboy_white";
+        return new TranslationTextComponent(key);
+    }
+
+    public void distrust(UUID id, long until) {
+        this.distrusted.put(id, until);
+    }
+
     @Override
     public void addAdditionalSaveData(CompoundNBT tag) {
         super.addAdditionalSaveData(tag);
         tag.putInt("Variant", this.getVariant());
+        tag.putInt("Coat", this.getCoat());
         tag.putInt("GiftLimit", this.giftLimit);
         tag.putInt("GiftsGiven", this.giftsGiven);
         tag.putInt("Refusals", this.refusals);
         tag.putInt("AngerTicks", this.angerTicks);
+        tag.putBoolean("Ignoring", this.ignoring);
+        tag.putInt("IgnoreClicks", this.ignoreClicks);
+        tag.putInt("CalmPoints", this.calmPoints);
         tag.putLong("LimitReset", this.limitResetTime);
+        ListNBT list = new ListNBT();
+        for (Map.Entry<UUID, Long> entry : this.distrusted.entrySet()) {
+            CompoundNBT c = new CompoundNBT();
+            c.putUUID("Id", entry.getKey());
+            c.putLong("Until", entry.getValue());
+            list.add(c);
+        }
+        tag.put("Distrusted", list);
     }
 
     @Override
     public void readAdditionalSaveData(CompoundNBT tag) {
         super.readAdditionalSaveData(tag);
         this.setVariant(tag.getInt("Variant"));
+        this.setCoat(tag.getInt("Coat"));
         if (tag.contains("GiftLimit")) {
             this.giftLimit = tag.getInt("GiftLimit");
         }
         this.giftsGiven = tag.getInt("GiftsGiven");
         this.refusals = tag.getInt("Refusals");
         this.angerTicks = tag.getInt("AngerTicks");
+        this.ignoring = tag.getBoolean("Ignoring");
+        this.ignoreClicks = tag.getInt("IgnoreClicks");
+        this.calmPoints = tag.getInt("CalmPoints");
         if (tag.contains("LimitReset")) {
             this.limitResetTime = tag.getLong("LimitReset");
+        }
+        this.distrusted.clear();
+        ListNBT list = tag.getList("Distrusted", 10);
+        for (int i = 0; i < list.size(); i++) {
+            CompoundNBT c = list.getCompound(i);
+            this.distrusted.put(c.getUUID("Id"), c.getLong("Until"));
         }
     }
 
@@ -147,6 +203,10 @@ public class FemboyEntity extends CreatureEntity {
         return this.random.nextInt(100) < whiteChance ? VARIANT_WHITE : VARIANT_BLACK;
     }
 
+    private int rollCoat() {
+        return this.random.nextInt(3) == 0 ? 0 : 1 + this.random.nextInt(COAT_COUNT - 1);
+    }
+
     @Override
     public ILivingEntityData finalizeSpawn(IServerWorld world, DifficultyInstance difficulty,
             SpawnReason reason, @Nullable ILivingEntityData data, @Nullable CompoundNBT tag) {
@@ -158,6 +218,7 @@ public class FemboyEntity extends CreatureEntity {
             data = new GroupData(variant);
         }
         this.setVariant(variant);
+        this.setCoat(this.rollCoat());
         return super.finalizeSpawn(world, difficulty, reason, data, tag);
     }
 
@@ -167,14 +228,80 @@ public class FemboyEntity extends CreatureEntity {
         if (!this.level.isClientSide && this.angerTicks > 0) {
             this.angerTicks--;
             if (this.angerTicks == 0) {
-                this.setTarget(null);
+                this.calmDown(false);
             }
         }
     }
 
+    private boolean isUpset() {
+        return this.angerTicks > 0 || this.ignoring;
+    }
+
+    private void startAnger(PlayerEntity player) {
+        this.angerTicks = 6000;
+        this.ignoring = false;
+        this.ignoreClicks = 0;
+        this.calmPoints = 0;
+        this.setItemSlot(EquipmentSlotType.MAINHAND, new ItemStack(Items.WOODEN_SWORD));
+        this.say(player, "angry_start");
+        if (this.level.getDifficulty() != Difficulty.PEACEFUL && !player.isCreative() && !player.isSpectator()) {
+            this.setTarget(player);
+        }
+    }
+
+    private void calmDown(boolean full) {
+        this.angerTicks = 0;
+        this.calmPoints = 0;
+        this.ignoreClicks = 0;
+        this.setTarget(null);
+        this.setItemSlot(EquipmentSlotType.MAINHAND, ItemStack.EMPTY);
+        if (full) {
+            this.ignoring = false;
+            this.refusals = 0;
+        } else {
+            this.ignoring = true;
+        }
+    }
+
+    private static int calmPointsFor(ItemStack stack) {
+        Item item = stack.getItem();
+        if (ItemTags.FLOWERS.contains(item)) {
+            return 10;
+        }
+        if (item == Items.WHEAT) {
+            return 2;
+        }
+        if (item == Items.BREAD || item == Items.COOKIE) {
+            return 3;
+        }
+        if (item == Items.CARROT) {
+            return 4;
+        }
+        if (item == Items.APPLE) {
+            return 5;
+        }
+        if (item == Items.COOKED_BEEF || item == Items.COOKED_PORKCHOP || item == Items.COOKED_CHICKEN
+                || item == Items.COOKED_MUTTON || item == Items.COOKED_RABBIT || item == Items.COOKED_COD
+                || item == Items.COOKED_SALMON) {
+            return 10;
+        }
+        if (item == Items.GOLDEN_APPLE) {
+            return 40;
+        }
+        if (item == Items.ENCHANTED_GOLDEN_APPLE) {
+            return 100;
+        }
+        return 0;
+    }
+
     @Override
     public ActionResultType mobInteract(PlayerEntity player, Hand hand) {
-        if (hand != Hand.MAIN_HAND || !player.getItemInHand(hand).isEmpty()) {
+        if (hand != Hand.MAIN_HAND) {
+            return super.mobInteract(player, hand);
+        }
+        ItemStack held = player.getItemInHand(hand);
+        int points = held.isEmpty() ? 0 : calmPointsFor(held);
+        if (!held.isEmpty() && points == 0) {
             return super.mobInteract(player, hand);
         }
         if (this.level.isClientSide) {
@@ -184,6 +311,25 @@ public class FemboyEntity extends CreatureEntity {
             return ActionResultType.CONSUME;
         }
         this.lastInteractTick = this.tickCount;
+        this.getLookControl().setLookAt(player, 30.0F, 30.0F);
+
+        if (points > 0) {
+            if (!this.isUpset()) {
+                return super.mobInteract(player, hand);
+            }
+            if (!player.abilities.instabuild) {
+                held.shrink(1);
+            }
+            this.calmPoints += points;
+            if (this.calmPoints >= 100) {
+                this.calmDown(true);
+                this.say(player, "calm");
+            } else {
+                player.displayClientMessage(
+                        new TranslationTextComponent("message.femboycompanion.placate", 100 - this.calmPoints), false);
+            }
+            return ActionResultType.SUCCESS;
+        }
 
         long now = this.level.getGameTime();
         if (now >= this.limitResetTime) {
@@ -192,11 +338,27 @@ public class FemboyEntity extends CreatureEntity {
             this.refusals = 0;
             this.limitResetTime = now + 24000L;
         }
-        this.getLookControl().setLookAt(player, 30.0F, 30.0F);
 
+        Long until = this.distrusted.get(player.getUUID());
+        if (until != null) {
+            if (now < until) {
+                this.say(player, "distrust");
+                return ActionResultType.CONSUME;
+            }
+            this.distrusted.remove(player.getUUID());
+        }
         if (this.angerTicks > 0) {
             this.say(player, "angry");
             return ActionResultType.CONSUME;
+        }
+        if (this.ignoring) {
+            this.ignoreClicks++;
+            if (this.ignoreClicks >= 3) {
+                this.startAnger(player);
+            } else {
+                this.say(player, "ignore");
+            }
+            return ActionResultType.SUCCESS;
         }
         if (this.giftsGiven < this.giftLimit) {
             this.giftsGiven++;
@@ -207,11 +369,7 @@ public class FemboyEntity extends CreatureEntity {
             if (this.refusals <= 3) {
                 this.say(player, "refuse" + this.refusals);
             } else {
-                this.angerTicks = 6000;
-                this.say(player, "angry");
-                if (this.level.getDifficulty() != Difficulty.PEACEFUL) {
-                    this.setTarget(player);
-                }
+                this.startAnger(player);
             }
         }
         return ActionResultType.SUCCESS;
@@ -232,20 +390,29 @@ public class FemboyEntity extends CreatureEntity {
     }
 
     private static ItemStack rollGift(Random random) {
-        int r = random.nextInt(100);
-        if (r < 65) {
-            return pick(random, new Item[] {Items.BREAD, Items.APPLE, Items.CARROT, Items.COAL}, 3);
+        int r = random.nextInt(1000);
+        if (r < 800) {
+            Item[] common = {Items.DANDELION, Items.POPPY, Items.BLUE_ORCHID, Items.ALLIUM, Items.AZURE_BLUET,
+                    Items.RED_TULIP, Items.ORANGE_TULIP, Items.WHITE_TULIP, Items.PINK_TULIP, Items.OXEYE_DAISY,
+                    Items.CORNFLOWER, Items.LILY_OF_THE_VALLEY, Items.WHEAT_SEEDS, Items.PUMPKIN_SEEDS,
+                    Items.MELON_SEEDS, Items.BEETROOT_SEEDS, Items.BONE, Items.COD, Items.SALMON, Items.STICK,
+                    Items.APPLE, Items.CARROT, Items.POTATO};
+            return pick(random, common, 3);
         }
-        if (r < 85) {
-            return pick(random, new Item[] {Items.GOLDEN_CARROT, Items.IRON_INGOT}, 2);
+        if (r < 950) {
+            Item[] uncommon = {Items.BREAD, Items.COOKIE, Items.COOKED_COD, Items.COOKED_SALMON, Items.COAL,
+                    Items.STRING, Items.SUGAR};
+            return pick(random, uncommon, 2);
         }
-        if (r < 95) {
-            return pick(random, new Item[] {Items.GOLD_INGOT, Items.LAPIS_LAZULI}, 1);
+        if (r < 990) {
+            Item[] rare = {Items.IRON_INGOT, Items.GOLD_NUGGET, Items.LAPIS_LAZULI};
+            return pick(random, rare, 2);
         }
-        if (r < 99) {
-            return new ItemStack(Items.DIAMOND);
+        if (r < 999) {
+            Item[] epic = {Items.GOLD_INGOT, Items.GOLDEN_CARROT, Items.EMERALD};
+            return pick(random, epic, 1);
         }
-        return new ItemStack(Items.GOLDEN_APPLE);
+        return new ItemStack(random.nextBoolean() ? Items.DIAMOND : Items.GOLDEN_APPLE);
     }
 
     private static ItemStack pick(Random random, Item[] items, int maxCount) {
