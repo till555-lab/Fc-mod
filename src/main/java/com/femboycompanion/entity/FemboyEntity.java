@@ -9,6 +9,7 @@ import javax.annotation.Nullable;
 import com.femboycompanion.FemboyCompanion;
 import com.femboycompanion.registry.ModItems;
 
+import net.minecraft.block.Blocks;
 import net.minecraft.entity.CreatureEntity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.ILivingEntityData;
@@ -72,7 +73,8 @@ public class FemboyEntity extends CreatureEntity {
     private long limitResetTime = -1L;
     private int lastInteractTick = -100;
     private final Map<UUID, Long> distrusted = new HashMap<>();
-    private final Map<UUID, Integer> trustPoints = new HashMap<>();
+    private int attackPause;
+    private UUID angryAt;
 
     public FemboyEntity(EntityType<? extends FemboyEntity> type, World world) {
         super(type, world);
@@ -91,7 +93,7 @@ public class FemboyEntity extends CreatureEntity {
     public static boolean checkSpawnRules(EntityType<FemboyEntity> type, IServerWorld world,
             SpawnReason reason, BlockPos pos, Random random) {
         return world.getRawBrightness(pos, 0) > 8
-                && MobEntity.checkMobSpawnRules(type, world, reason, pos, random);
+                && world.getBlockState(pos.below()).is(Blocks.GRASS_BLOCK);
     }
 
     @Override
@@ -148,7 +150,6 @@ public class FemboyEntity extends CreatureEntity {
 
     public void distrust(UUID id, long until) {
         this.distrusted.put(id, until);
-        this.trustPoints.put(id, 0);
     }
 
     private boolean isDistrusting(UUID id, long now) {
@@ -158,7 +159,6 @@ public class FemboyEntity extends CreatureEntity {
         }
         if (now >= until) {
             this.distrusted.remove(id);
-            this.trustPoints.remove(id);
             return false;
         }
         return true;
@@ -188,7 +188,6 @@ public class FemboyEntity extends CreatureEntity {
             CompoundNBT c = new CompoundNBT();
             c.putUUID("Id", entry.getKey());
             c.putLong("Until", entry.getValue());
-            c.putInt("Points", this.trustPoints.getOrDefault(entry.getKey(), 0));
             list.add(c);
         }
         tag.put("Distrusted", list);
@@ -212,13 +211,10 @@ public class FemboyEntity extends CreatureEntity {
             this.limitResetTime = tag.getLong("LimitReset");
         }
         this.distrusted.clear();
-        this.trustPoints.clear();
         ListNBT list = tag.getList("Distrusted", 10);
         for (int i = 0; i < list.size(); i++) {
             CompoundNBT c = list.getCompound(i);
-            UUID id = c.getUUID("Id");
-            this.distrusted.put(id, c.getLong("Until"));
-            this.trustPoints.put(id, c.getInt("Points"));
+            this.distrusted.put(c.getUUID("Id"), c.getLong("Until"));
         }
         this.syncAnger();
     }
@@ -277,6 +273,17 @@ public class FemboyEntity extends CreatureEntity {
                 this.calmDown(false);
             }
         }
+        if (this.attackPause > 0) {
+            this.attackPause--;
+            this.setTarget(null);
+            if (this.attackPause == 0 && this.angerTicks > 0 && this.angryAt != null
+                    && this.level.getDifficulty() != Difficulty.PEACEFUL) {
+                PlayerEntity victim = this.level.getPlayerByUUID(this.angryAt);
+                if (victim != null && !victim.isCreative() && !victim.isSpectator()) {
+                    this.setTarget(victim);
+                }
+            }
+        }
         if (this.tickCount % 20 == 0) {
             PlayerEntity near = this.level.getNearestPlayer(this, 10.0D);
             if (near != null) {
@@ -290,6 +297,7 @@ public class FemboyEntity extends CreatureEntity {
         boolean result = super.hurt(source, amount);
         if (result && !this.level.isClientSide && this.isAlive() && source.getEntity() instanceof PlayerEntity) {
             PlayerEntity attacker = (PlayerEntity) source.getEntity();
+            this.attackPause = 0;
             if (this.angerTicks <= 0) {
                 this.startAnger(attacker);
             } else if (this.level.getDifficulty() != Difficulty.PEACEFUL && !attacker.isCreative()
@@ -305,6 +313,8 @@ public class FemboyEntity extends CreatureEntity {
     }
 
     private void startAnger(PlayerEntity player) {
+        this.angryAt = player.getUUID();
+        this.attackPause = 0;
         this.angerTicks = 6000;
         this.ignoring = false;
         this.ignoreClicks = 0;
@@ -371,6 +381,7 @@ public class FemboyEntity extends CreatureEntity {
             return super.mobInteract(player, hand);
         }
         ItemStack held = player.getItemInHand(hand);
+        boolean peek = held.isEmpty() && player.isShiftKeyDown();
         int points = held.isEmpty() ? 0 : calmPointsFor(held);
         if (!held.isEmpty() && points == 0) {
             return super.mobInteract(player, hand);
@@ -386,12 +397,33 @@ public class FemboyEntity extends CreatureEntity {
         long now = this.level.getGameTime();
         UUID id = player.getUUID();
 
+        if (peek) {
+            long wait = 0L;
+            if (this.isDistrusting(id, now)) {
+                wait = this.distrusted.get(id) - now;
+            } else if (this.giftsGiven >= this.giftLimit && this.limitResetTime > now) {
+                wait = this.limitResetTime - now;
+            }
+            if (wait <= 0L) {
+                player.displayClientMessage(
+                        new TranslationTextComponent("message.femboycompanion.wait_ready"), true);
+            } else {
+                long seconds = wait / 20L;
+                String text = (seconds / 60L) + ":" + String.format("%02d", seconds % 60L);
+                player.displayClientMessage(
+                        new TranslationTextComponent("message.femboycompanion.wait", text), true);
+            }
+            return ActionResultType.SUCCESS;
+        }
+
         if (points > 0) {
             if (this.isUpset()) {
                 if (!player.abilities.instabuild) {
                     held.shrink(1);
                 }
                 this.calmPoints += points;
+                this.attackPause = 100;
+                this.setTarget(null);
                 if (this.calmPoints >= 100) {
                     this.calmDown(true);
                     this.say(player, "calm");
@@ -402,19 +434,17 @@ public class FemboyEntity extends CreatureEntity {
                 return ActionResultType.SUCCESS;
             }
             if (this.isDistrusting(id, now)) {
+                long until = this.distrusted.get(id);
+                long minUntil = now + 2400L;
+                if (until <= minUntil) {
+                    this.say(player, "pockets_full");
+                    return ActionResultType.SUCCESS;
+                }
                 if (!player.abilities.instabuild) {
                     held.shrink(1);
                 }
-                int total = this.trustPoints.getOrDefault(id, 0) + points;
-                if (total >= 100) {
-                    this.distrusted.remove(id);
-                    this.trustPoints.remove(id);
-                    this.say(player, "forgive");
-                } else {
-                    this.trustPoints.put(id, total);
-                    player.displayClientMessage(
-                            new TranslationTextComponent("message.femboycompanion.trust", total), true);
-                }
+                this.distrusted.put(id, Math.max(minUntil, until - points * 40L));
+                this.say(player, "gift_taken");
                 return ActionResultType.SUCCESS;
             }
             return super.mobInteract(player, hand);

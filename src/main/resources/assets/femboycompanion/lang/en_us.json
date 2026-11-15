@@ -46,5 +46,9 @@
   "advancements.femboycompanion.get_tail.title": "Tail",
   "advancements.femboycompanion.get_tail.desc": "Get a femboy tail. It drops from a femboy or can be crafted from wool and a lead.",
   "advancements.femboycompanion.get_paws.title": "Paws",
-  "advancements.femboycompanion.get_paws.desc": "Get femboy paws. They drop from a femboy or can be crafted from wool and leather boots."
+  "advancements.femboycompanion.get_paws.desc": "Get femboy paws. They drop from a femboy or can be crafted from wool and leather boots.",
+  "message.femboycompanion.gift_taken": "The femboy takes your offering.",
+  "message.femboycompanion.pockets_full": "Femboy: My pockets are full, I can't take more.",
+  "message.femboycompanion.wait": "The femboy will give gifts again in %s",
+  "message.femboycompanion.wait_ready": "The femboy is ready to give gifts"
 }

@@ -9,6 +9,8 @@ import net.minecraft.util.math.MathHelper;
 public class FemboyModel extends BipedModel<FemboyEntity> {
     private final ModelRenderer earLeft;
     private final ModelRenderer earRight;
+    private final ModelRenderer cheekLeft;
+    private final ModelRenderer cheekRight;
     private final ModelRenderer tail;
 
     public FemboyModel() {
@@ -25,15 +27,15 @@ public class FemboyModel extends BipedModel<FemboyEntity> {
         muzzle.setPos(0.0F, -3.0F, -4.0F);
         this.head.addChild(muzzle);
 
-        ModelRenderer cheekLeft = new ModelRenderer(this, 40, 5);
-        cheekLeft.addBox(0.0F, 0.0F, -1.0F, 1.0F, 2.0F, 2.0F);
-        cheekLeft.setPos(4.0F, -3.0F, -1.0F);
-        this.head.addChild(cheekLeft);
+        this.cheekLeft = new ModelRenderer(this, 40, 5);
+        this.cheekLeft.addBox(0.0F, 0.0F, -1.0F, 1.0F, 2.0F, 2.0F);
+        this.cheekLeft.setPos(4.0F, -3.0F, -1.0F);
+        this.head.addChild(this.cheekLeft);
 
-        ModelRenderer cheekRight = new ModelRenderer(this, 40, 5);
-        cheekRight.addBox(-1.0F, 0.0F, -1.0F, 1.0F, 2.0F, 2.0F);
-        cheekRight.setPos(-4.0F, -3.0F, -1.0F);
-        this.head.addChild(cheekRight);
+        this.cheekRight = new ModelRenderer(this, 40, 5);
+        this.cheekRight.addBox(-1.0F, 0.0F, -1.0F, 1.0F, 2.0F, 2.0F);
+        this.cheekRight.setPos(-4.0F, -3.0F, -1.0F);
+        this.head.addChild(this.cheekRight);
 
         this.tail = new ModelRenderer(this, 48, 5);
         this.tail.addBox(-2.0F, -2.0F, 0.0F, 4.0F, 4.0F, 4.0F);
@@ -43,6 +45,14 @@ public class FemboyModel extends BipedModel<FemboyEntity> {
         tip.setPos(0.0F, 0.0F, 4.0F);
         this.tail.addChild(tip);
         this.body.addChild(this.tail);
+    }
+
+    public void setDetailed(boolean detailed) {
+        this.earLeft.visible = detailed;
+        this.earRight.visible = detailed;
+        this.cheekLeft.visible = detailed;
+        this.cheekRight.visible = detailed;
+        this.tail.visible = detailed;
     }
 
     private ModelRenderer makeEar(float x) {

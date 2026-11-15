@@ -46,5 +46,9 @@
   "advancements.femboycompanion.get_tail.title": "Хвост",
   "advancements.femboycompanion.get_tail.desc": "Получите хвост фембоя. Он выпадает с фембоя или крафтится из шерсти и поводка.",
   "advancements.femboycompanion.get_paws.title": "Лапки",
-  "advancements.femboycompanion.get_paws.desc": "Получите лапки фембоя. Они выпадают с фембоя или крафтятся из шерсти и кожаных ботинок."
+  "advancements.femboycompanion.get_paws.desc": "Получите лапки фембоя. Они выпадают с фембоя или крафтятся из шерсти и кожаных ботинок.",
+  "message.femboycompanion.gift_taken": "Фембой берёт угощение.",
+  "message.femboycompanion.pockets_full": "Фембой: У меня уже полный карман, больше не возьму.",
+  "message.femboycompanion.wait": "Фембой снова даст подарок через %s",
+  "message.femboycompanion.wait_ready": "Фембой готов дарить подарки"
 }

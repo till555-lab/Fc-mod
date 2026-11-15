@@ -64,7 +64,11 @@ public class FemboyCompanion {
             return;
         }
         event.getSpawns().getSpawner(EntityClassification.CREATURE)
-                .add(new MobSpawnInfo.Spawners(ModEntities.FEMBOY.get(), 6, 2, 4));
+                .add(new MobSpawnInfo.Spawners(ModEntities.FEMBOY.get(), 8, 2, 4));
+        event.getSpawns().getSpawner(EntityClassification.CREATURE)
+                .add(new MobSpawnInfo.Spawners(ModEntities.FEMBOY.get(), 3, 5, 6));
+        event.getSpawns().getSpawner(EntityClassification.CREATURE)
+                .add(new MobSpawnInfo.Spawners(ModEntities.FEMBOY.get(), 1, 7, 9));
     }
 
     private void onLivingDeath(LivingDeathEvent event) {
@@ -85,7 +89,7 @@ public class FemboyCompanion {
         AxisAlignedBB area = dead.getBoundingBox().inflate(16.0D);
         for (FemboyEntity witness : dead.level.getEntitiesOfClass(FemboyEntity.class, area)) {
             if (witness != dead) {
-                witness.distrust(killer.getUUID(), dead.level.getGameTime() + 6000L);
+                witness.distrust(killer.getUUID(), dead.level.getGameTime() + 12000L);
             }
         }
     }
