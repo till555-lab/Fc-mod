@@ -46,13 +46,8 @@ def paint(kinds, u, v, w, h, d, fn):
 
 
 def head_fn(name, lx, ly):
-    if name == "front":
-        if lx in (1, 6) and ly in (3, 4):
-            return "eye"
-        if lx in (3, 4) and ly == 5:
-            return "nose"
-        if ly >= 5 and 2 <= lx <= 5:
-            return "muz"
+    if name == "front" and lx in (1, 6) and ly in (3, 4):
+        return "eye"
     return "fur"
 
 
@@ -71,13 +66,19 @@ def limb_fn(name, lx, ly):
 
 
 def ear_fn(name, lx, ly):
-    if name == "front" and lx == 1 and 2 <= ly <= 10:
+    if name == "front" and lx == 1:
         return "ear"
     return "fur"
 
 
-def tail_fn(name, lx, ly):
-    return "tip" if name == "back" else "fur"
+def muzzle_fn(name, lx, ly):
+    if name == "front" and ly == 0 and lx in (1, 2):
+        return "nose"
+    return "muz"
+
+
+def tip_fn(name, lx, ly):
+    return "tip"
 
 
 def build_kinds():
@@ -86,8 +87,12 @@ def build_kinds():
     paint(kinds, 16, 16, 8, 12, 4, body_fn)
     paint(kinds, 40, 16, 4, 12, 4, limb_fn)
     paint(kinds, 0, 16, 4, 12, 4, limb_fn)
-    paint(kinds, 32, 0, 3, 12, 1, ear_fn)
-    paint(kinds, 48, 0, 3, 3, 4, tail_fn)
+    paint(kinds, 32, 0, 3, 3, 1, ear_fn)
+    paint(kinds, 32, 4, 2, 3, 1, lambda n, x, y: "fur")
+    paint(kinds, 40, 0, 4, 2, 3, muzzle_fn)
+    paint(kinds, 40, 5, 1, 2, 2, lambda n, x, y: "muz")
+    paint(kinds, 48, 5, 4, 4, 4, lambda n, x, y: "fur")
+    paint(kinds, 32, 9, 4, 4, 3, tip_fn)
     return kinds
 
 

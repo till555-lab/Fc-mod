@@ -69,7 +69,6 @@ public class FemboyEntity extends CreatureEntity {
     private boolean ignoring;
     private int ignoreClicks;
     private int calmPoints;
-    private int nearSeconds;
     private long limitResetTime = -1L;
     private int lastInteractTick = -100;
     private final Map<UUID, Long> distrusted = new HashMap<>();
@@ -279,17 +278,26 @@ public class FemboyEntity extends CreatureEntity {
             }
         }
         if (this.tickCount % 20 == 0) {
-            PlayerEntity near = this.level.getNearestPlayer(this, 8.0D);
-            if (near == null) {
-                this.nearSeconds = 0;
-            } else {
-                this.nearSeconds++;
-                if (this.nearSeconds >= 10) {
-                    this.nearSeconds = 0;
-                    this.fire(near, this.getVariant() == VARIANT_BLACK ? "meet_black" : "meet_white");
-                }
+            PlayerEntity near = this.level.getNearestPlayer(this, 10.0D);
+            if (near != null) {
+                this.fire(near, this.getVariant() == VARIANT_BLACK ? "meet_black" : "meet_white");
             }
         }
+    }
+
+    @Override
+    public boolean hurt(DamageSource source, float amount) {
+        boolean result = super.hurt(source, amount);
+        if (result && !this.level.isClientSide && this.isAlive() && source.getEntity() instanceof PlayerEntity) {
+            PlayerEntity attacker = (PlayerEntity) source.getEntity();
+            if (this.angerTicks <= 0) {
+                this.startAnger(attacker);
+            } else if (this.level.getDifficulty() != Difficulty.PEACEFUL && !attacker.isCreative()
+                    && !attacker.isSpectator()) {
+                this.setTarget(attacker);
+            }
+        }
+        return result;
     }
 
     private boolean isUpset() {

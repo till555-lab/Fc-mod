@@ -1,7 +1,7 @@
 {
   "parent": "femboycompanion:root",
   "display": {
-    "icon": {"item": "femboycompanion:black_ears"},
+    "icon": {"item": "femboycompanion:black_femboy_spawn_egg"},
     "title": {"translate": "advancements.femboycompanion.meet_black.title"},
     "description": {"translate": "advancements.femboycompanion.meet_black.desc"},
     "frame": "task",

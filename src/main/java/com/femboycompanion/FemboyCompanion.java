@@ -10,6 +10,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityClassification;
 import net.minecraft.entity.EntitySpawnPlacementRegistry;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.entity.player.ServerPlayerEntity;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.biome.MobSpawnInfo;
@@ -77,6 +78,9 @@ public class FemboyCompanion {
         FemboyEntity dead = (FemboyEntity) event.getEntity();
         if (dead.level.isClientSide) {
             return;
+        }
+        if (killer instanceof ServerPlayerEntity) {
+            TRIGGER.fire((ServerPlayerEntity) killer, "kill");
         }
         AxisAlignedBB area = dead.getBoundingBox().inflate(16.0D);
         for (FemboyEntity witness : dead.level.getEntitiesOfClass(FemboyEntity.class, area)) {

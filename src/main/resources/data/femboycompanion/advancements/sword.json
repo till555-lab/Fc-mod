@@ -15,5 +15,5 @@
       "conditions": {"event": "sword"}
     }
   },
-  "rewards": {"experience": 10}
+  "rewards": {"experience": 5}
 }
