@@ -26,6 +26,14 @@ public class FemboyRenderer extends BipedRenderer<FemboyEntity, FemboyModel> {
     }
 
     @Override
+    protected boolean shouldShowName(FemboyEntity entity) {
+        if (entity.getAnger() > 0 && this.entityRenderDispatcher.distanceToSqr(entity) < 1024.0D) {
+            return true;
+        }
+        return super.shouldShowName(entity);
+    }
+
+    @Override
     public ResourceLocation getTextureLocation(FemboyEntity entity) {
         int family = entity.getVariant() == FemboyEntity.VARIANT_BLACK ? 1 : 0;
         int coat = Math.floorMod(entity.getCoat(), FemboyEntity.COAT_COUNT);

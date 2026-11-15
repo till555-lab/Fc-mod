@@ -5,7 +5,7 @@ import zlib
 
 OUT = "src/main/resources/assets/femboycompanion/textures/entity"
 W, H = 64, 32
-DENSITY = [0.0, 0.04, 0.07, 0.10, 0.14, 0.19, 0.25, 0.32]
+DENSITY = [0.0, 0.008, 0.015, 0.025, 0.035, 0.05, 0.065, 0.08]
 
 FAMILIES = {
     "white": {

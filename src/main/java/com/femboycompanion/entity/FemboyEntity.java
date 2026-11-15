@@ -6,6 +6,7 @@ import java.util.Random;
 import java.util.UUID;
 import javax.annotation.Nullable;
 
+import com.femboycompanion.FemboyCompanion;
 import com.femboycompanion.registry.ModItems;
 
 import net.minecraft.entity.CreatureEntity;
@@ -22,6 +23,7 @@ import net.minecraft.entity.ai.goal.SwimGoal;
 import net.minecraft.entity.ai.goal.WaterAvoidingRandomWalkingGoal;
 import net.minecraft.entity.item.ItemEntity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.entity.player.ServerPlayerEntity;
 import net.minecraft.inventory.EquipmentSlotType;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
@@ -57,6 +59,8 @@ public class FemboyEntity extends CreatureEntity {
             EntityDataManager.defineId(FemboyEntity.class, DataSerializers.INT);
     private static final DataParameter<Integer> COAT =
             EntityDataManager.defineId(FemboyEntity.class, DataSerializers.INT);
+    private static final DataParameter<Integer> ANGER =
+            EntityDataManager.defineId(FemboyEntity.class, DataSerializers.INT);
 
     private int giftLimit;
     private int giftsGiven;
@@ -65,9 +69,11 @@ public class FemboyEntity extends CreatureEntity {
     private boolean ignoring;
     private int ignoreClicks;
     private int calmPoints;
+    private int nearSeconds;
     private long limitResetTime = -1L;
     private int lastInteractTick = -100;
     private final Map<UUID, Long> distrusted = new HashMap<>();
+    private final Map<UUID, Integer> trustPoints = new HashMap<>();
 
     public FemboyEntity(EntityType<? extends FemboyEntity> type, World world) {
         super(type, world);
@@ -103,6 +109,7 @@ public class FemboyEntity extends CreatureEntity {
         super.defineSynchedData();
         this.entityData.define(VARIANT, VARIANT_WHITE);
         this.entityData.define(COAT, 0);
+        this.entityData.define(ANGER, 0);
     }
 
     public int getVariant() {
@@ -121,15 +128,47 @@ public class FemboyEntity extends CreatureEntity {
         this.entityData.set(COAT, coat);
     }
 
+    public int getAnger() {
+        return this.entityData.get(ANGER);
+    }
+
+    private void syncAnger() {
+        this.entityData.set(ANGER, this.isUpset() ? Math.max(1, 100 - this.calmPoints) : 0);
+    }
+
     public ITextComponent getTypeName() {
-        String key = this.getVariant() == VARIANT_BLACK
+        ITextComponent base = new TranslationTextComponent(this.getVariant() == VARIANT_BLACK
                 ? "entity.femboycompanion.femboy_black"
-                : "entity.femboycompanion.femboy_white";
-        return new TranslationTextComponent(key);
+                : "entity.femboycompanion.femboy_white");
+        int anger = this.getAnger();
+        if (anger > 0) {
+            return new TranslationTextComponent("entity.femboycompanion.angry_suffix", base, anger);
+        }
+        return base;
     }
 
     public void distrust(UUID id, long until) {
         this.distrusted.put(id, until);
+        this.trustPoints.put(id, 0);
+    }
+
+    private boolean isDistrusting(UUID id, long now) {
+        Long until = this.distrusted.get(id);
+        if (until == null) {
+            return false;
+        }
+        if (now >= until) {
+            this.distrusted.remove(id);
+            this.trustPoints.remove(id);
+            return false;
+        }
+        return true;
+    }
+
+    private void fire(PlayerEntity player, String event) {
+        if (player instanceof ServerPlayerEntity) {
+            FemboyCompanion.TRIGGER.fire((ServerPlayerEntity) player, event);
+        }
     }
 
     @Override
@@ -150,6 +189,7 @@ public class FemboyEntity extends CreatureEntity {
             CompoundNBT c = new CompoundNBT();
             c.putUUID("Id", entry.getKey());
             c.putLong("Until", entry.getValue());
+            c.putInt("Points", this.trustPoints.getOrDefault(entry.getKey(), 0));
             list.add(c);
         }
         tag.put("Distrusted", list);
@@ -173,11 +213,15 @@ public class FemboyEntity extends CreatureEntity {
             this.limitResetTime = tag.getLong("LimitReset");
         }
         this.distrusted.clear();
+        this.trustPoints.clear();
         ListNBT list = tag.getList("Distrusted", 10);
         for (int i = 0; i < list.size(); i++) {
             CompoundNBT c = list.getCompound(i);
-            this.distrusted.put(c.getUUID("Id"), c.getLong("Until"));
+            UUID id = c.getUUID("Id");
+            this.distrusted.put(id, c.getLong("Until"));
+            this.trustPoints.put(id, c.getInt("Points"));
         }
+        this.syncAnger();
     }
 
     private static class GroupData implements ILivingEntityData {
@@ -225,10 +269,25 @@ public class FemboyEntity extends CreatureEntity {
     @Override
     public void aiStep() {
         super.aiStep();
-        if (!this.level.isClientSide && this.angerTicks > 0) {
+        if (this.level.isClientSide) {
+            return;
+        }
+        if (this.angerTicks > 0) {
             this.angerTicks--;
             if (this.angerTicks == 0) {
                 this.calmDown(false);
+            }
+        }
+        if (this.tickCount % 20 == 0) {
+            PlayerEntity near = this.level.getNearestPlayer(this, 8.0D);
+            if (near == null) {
+                this.nearSeconds = 0;
+            } else {
+                this.nearSeconds++;
+                if (this.nearSeconds >= 10) {
+                    this.nearSeconds = 0;
+                    this.fire(near, this.getVariant() == VARIANT_BLACK ? "meet_black" : "meet_white");
+                }
             }
         }
     }
@@ -243,7 +302,9 @@ public class FemboyEntity extends CreatureEntity {
         this.ignoreClicks = 0;
         this.calmPoints = 0;
         this.setItemSlot(EquipmentSlotType.MAINHAND, new ItemStack(Items.WOODEN_SWORD));
+        this.syncAnger();
         this.say(player, "angry_start");
+        this.fire(player, "sword");
         if (this.level.getDifficulty() != Difficulty.PEACEFUL && !player.isCreative() && !player.isSpectator()) {
             this.setTarget(player);
         }
@@ -251,16 +312,18 @@ public class FemboyEntity extends CreatureEntity {
 
     private void calmDown(boolean full) {
         this.angerTicks = 0;
-        this.calmPoints = 0;
         this.ignoreClicks = 0;
         this.setTarget(null);
         this.setItemSlot(EquipmentSlotType.MAINHAND, ItemStack.EMPTY);
         if (full) {
+            this.calmPoints = 0;
             this.ignoring = false;
             this.refusals = 0;
         } else {
+            this.calmPoints = 50;
             this.ignoring = true;
         }
+        this.syncAnger();
     }
 
     private static int calmPointsFor(ItemStack stack) {
@@ -268,25 +331,25 @@ public class FemboyEntity extends CreatureEntity {
         if (ItemTags.FLOWERS.contains(item)) {
             return 10;
         }
-        if (item == Items.WHEAT) {
-            return 2;
-        }
-        if (item == Items.BREAD || item == Items.COOKIE) {
-            return 3;
+        if (item == Items.WHEAT || item == Items.COOKIE) {
+            return 5;
         }
         if (item == Items.CARROT) {
-            return 4;
+            return 6;
         }
         if (item == Items.APPLE) {
-            return 5;
+            return 8;
+        }
+        if (item == Items.BREAD) {
+            return 15;
         }
         if (item == Items.COOKED_BEEF || item == Items.COOKED_PORKCHOP || item == Items.COOKED_CHICKEN
                 || item == Items.COOKED_MUTTON || item == Items.COOKED_RABBIT || item == Items.COOKED_COD
                 || item == Items.COOKED_SALMON) {
-            return 10;
+            return 20;
         }
         if (item == Items.GOLDEN_APPLE) {
-            return 40;
+            return 50;
         }
         if (item == Items.ENCHANTED_GOLDEN_APPLE) {
             return 100;
@@ -312,40 +375,52 @@ public class FemboyEntity extends CreatureEntity {
         }
         this.lastInteractTick = this.tickCount;
         this.getLookControl().setLookAt(player, 30.0F, 30.0F);
+        long now = this.level.getGameTime();
+        UUID id = player.getUUID();
 
         if (points > 0) {
-            if (!this.isUpset()) {
-                return super.mobInteract(player, hand);
+            if (this.isUpset()) {
+                if (!player.abilities.instabuild) {
+                    held.shrink(1);
+                }
+                this.calmPoints += points;
+                if (this.calmPoints >= 100) {
+                    this.calmDown(true);
+                    this.say(player, "calm");
+                    this.fire(player, "placated");
+                } else {
+                    this.syncAnger();
+                }
+                return ActionResultType.SUCCESS;
             }
-            if (!player.abilities.instabuild) {
-                held.shrink(1);
+            if (this.isDistrusting(id, now)) {
+                if (!player.abilities.instabuild) {
+                    held.shrink(1);
+                }
+                int total = this.trustPoints.getOrDefault(id, 0) + points;
+                if (total >= 100) {
+                    this.distrusted.remove(id);
+                    this.trustPoints.remove(id);
+                    this.say(player, "forgive");
+                } else {
+                    this.trustPoints.put(id, total);
+                    player.displayClientMessage(
+                            new TranslationTextComponent("message.femboycompanion.trust", total), true);
+                }
+                return ActionResultType.SUCCESS;
             }
-            this.calmPoints += points;
-            if (this.calmPoints >= 100) {
-                this.calmDown(true);
-                this.say(player, "calm");
-            } else {
-                player.displayClientMessage(
-                        new TranslationTextComponent("message.femboycompanion.placate", 100 - this.calmPoints), false);
-            }
-            return ActionResultType.SUCCESS;
+            return super.mobInteract(player, hand);
         }
 
-        long now = this.level.getGameTime();
         if (now >= this.limitResetTime) {
             this.giftLimit = 2 + this.random.nextInt(9);
             this.giftsGiven = 0;
             this.refusals = 0;
             this.limitResetTime = now + 24000L;
         }
-
-        Long until = this.distrusted.get(player.getUUID());
-        if (until != null) {
-            if (now < until) {
-                this.say(player, "distrust");
-                return ActionResultType.CONSUME;
-            }
-            this.distrusted.remove(player.getUUID());
+        if (this.isDistrusting(id, now)) {
+            this.say(player, "distrust");
+            return ActionResultType.CONSUME;
         }
         if (this.angerTicks > 0) {
             this.say(player, "angry");
@@ -364,6 +439,7 @@ public class FemboyEntity extends CreatureEntity {
             this.giftsGiven++;
             this.giveGift(player);
             this.say(player, "gift");
+            this.fire(player, "gift");
         } else {
             this.refusals++;
             if (this.refusals <= 3) {

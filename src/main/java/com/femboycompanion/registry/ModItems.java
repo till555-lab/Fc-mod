@@ -33,9 +33,13 @@ public class ModItems {
             () -> new FemboySpawnEggItem(FemboyEntity.VARIANT_BLACK, props()));
 
     public static final RegistryObject<Item> WHITE_EARS = ITEMS.register("white_ears", () -> new Item(props()));
+    public static final RegistryObject<Item> WHITE_DOUBLE_EARS =
+            ITEMS.register("white_double_ears", () -> new Item(props()));
     public static final RegistryObject<Item> WHITE_TAIL = ITEMS.register("white_tail", () -> new Item(props()));
     public static final RegistryObject<Item> WHITE_PAWS = ITEMS.register("white_paws", () -> new Item(props()));
     public static final RegistryObject<Item> BLACK_EARS = ITEMS.register("black_ears", () -> new Item(props()));
+    public static final RegistryObject<Item> BLACK_DOUBLE_EARS =
+            ITEMS.register("black_double_ears", () -> new Item(props()));
     public static final RegistryObject<Item> BLACK_TAIL = ITEMS.register("black_tail", () -> new Item(props()));
     public static final RegistryObject<Item> BLACK_PAWS = ITEMS.register("black_paws", () -> new Item(props()));
 

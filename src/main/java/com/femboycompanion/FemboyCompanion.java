@@ -1,9 +1,11 @@
 package com.femboycompanion;
 
+import com.femboycompanion.advancement.FemboyTrigger;
 import com.femboycompanion.entity.FemboyEntity;
 import com.femboycompanion.registry.ModEntities;
 import com.femboycompanion.registry.ModItems;
 
+import net.minecraft.advancements.CriteriaTriggers;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityClassification;
 import net.minecraft.entity.EntitySpawnPlacementRegistry;
@@ -27,6 +29,7 @@ import org.apache.logging.log4j.Logger;
 public class FemboyCompanion {
     public static final String MOD_ID = "femboycompanion";
     public static final Logger LOGGER = LogManager.getLogger();
+    public static final FemboyTrigger TRIGGER = new FemboyTrigger();
 
     public FemboyCompanion() {
         IEventBus bus = FMLJavaModLoadingContext.get().getModEventBus();
@@ -44,10 +47,13 @@ public class FemboyCompanion {
     }
 
     private void onCommonSetup(FMLCommonSetupEvent event) {
-        event.enqueueWork(() -> EntitySpawnPlacementRegistry.register(ModEntities.FEMBOY.get(),
-                EntitySpawnPlacementRegistry.PlacementType.ON_GROUND,
-                Heightmap.Type.MOTION_BLOCKING_NO_LEAVES,
-                FemboyEntity::checkSpawnRules));
+        event.enqueueWork(() -> {
+            CriteriaTriggers.register(TRIGGER);
+            EntitySpawnPlacementRegistry.register(ModEntities.FEMBOY.get(),
+                    EntitySpawnPlacementRegistry.PlacementType.ON_GROUND,
+                    Heightmap.Type.MOTION_BLOCKING_NO_LEAVES,
+                    FemboyEntity::checkSpawnRules);
+        });
     }
 
     private void onBiomeLoading(BiomeLoadingEvent event) {
@@ -75,7 +81,7 @@ public class FemboyCompanion {
         AxisAlignedBB area = dead.getBoundingBox().inflate(16.0D);
         for (FemboyEntity witness : dead.level.getEntitiesOfClass(FemboyEntity.class, area)) {
             if (witness != dead) {
-                witness.distrust(killer.getUUID(), dead.level.getGameTime() + 72000L);
+                witness.distrust(killer.getUUID(), dead.level.getGameTime() + 6000L);
             }
         }
     }
