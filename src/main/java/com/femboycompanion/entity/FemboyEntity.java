@@ -1,6 +1,9 @@
 package com.femboycompanion.entity;
 
+import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
@@ -17,15 +20,24 @@ import net.minecraft.entity.MobEntity;
 import net.minecraft.entity.SpawnReason;
 import net.minecraft.entity.ai.attributes.AttributeModifierMap;
 import net.minecraft.entity.ai.attributes.Attributes;
+import net.minecraft.entity.ai.goal.AvoidEntityGoal;
+import net.minecraft.entity.ai.goal.Goal;
 import net.minecraft.entity.ai.goal.LookAtGoal;
 import net.minecraft.entity.ai.goal.LookRandomlyGoal;
 import net.minecraft.entity.ai.goal.MeleeAttackGoal;
+import net.minecraft.entity.ai.goal.NearestAttackableTargetGoal;
 import net.minecraft.entity.ai.goal.SwimGoal;
 import net.minecraft.entity.ai.goal.WaterAvoidingRandomWalkingGoal;
 import net.minecraft.entity.item.ItemEntity;
+import net.minecraft.entity.monster.CreeperEntity;
+import net.minecraft.entity.monster.EndermanEntity;
+import net.minecraft.entity.monster.MonsterEntity;
+import net.minecraft.entity.passive.ChickenEntity;
+import net.minecraft.entity.passive.RabbitEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.ServerPlayerEntity;
 import net.minecraft.inventory.EquipmentSlotType;
+import net.minecraft.item.Food;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
@@ -39,6 +51,7 @@ import net.minecraft.tags.ItemTags;
 import net.minecraft.util.ActionResultType;
 import net.minecraft.util.DamageSource;
 import net.minecraft.util.Hand;
+import net.minecraft.util.SoundEvents;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.vector.Vector3d;
@@ -73,6 +86,11 @@ public class FemboyEntity extends CreatureEntity {
     private long limitResetTime = -1L;
     private int lastInteractTick = -100;
     private final Map<UUID, Long> distrusted = new HashMap<>();
+    private static final int POCKET_MAX = 8;
+
+    private final List<ItemStack> pocket = new ArrayList<>();
+    private boolean defender;
+    private int lastHurtTick = -1000;
     private int attackPause;
     private UUID angryAt;
 
@@ -99,10 +117,35 @@ public class FemboyEntity extends CreatureEntity {
     @Override
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new SwimGoal(this));
+        this.goalSelector.addGoal(1, new AvoidEntityGoal<MonsterEntity>(this, MonsterEntity.class, 10.0F, 1.0D, 1.4D) {
+            @Override
+            public boolean canUse() {
+                return !FemboyEntity.this.defender && FemboyEntity.this.angerTicks <= 0 && super.canUse();
+            }
+        });
         this.goalSelector.addGoal(2, new MeleeAttackGoal(this, 1.2D, true));
+        this.goalSelector.addGoal(3, new HealFriendGoal());
+        this.goalSelector.addGoal(4, new PickupItemsGoal());
         this.goalSelector.addGoal(5, new WaterAvoidingRandomWalkingGoal(this, 1.0D));
         this.goalSelector.addGoal(6, new LookAtGoal(this, PlayerEntity.class, 8.0F));
         this.goalSelector.addGoal(7, new LookRandomlyGoal(this));
+        this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<MonsterEntity>(this, MonsterEntity.class, 10,
+                true, false, e -> !(e instanceof EndermanEntity) && !(e instanceof CreeperEntity)) {
+            @Override
+            public boolean canUse() {
+                return FemboyEntity.this.defender && FemboyEntity.this.angerTicks <= 0 && super.canUse();
+            }
+        });
+        this.targetSelector.addGoal(3, new NearestAttackableTargetGoal<MobEntity>(this, MobEntity.class, 200,
+                true, false, e -> e instanceof ChickenEntity || e instanceof RabbitEntity) {
+            @Override
+            public boolean canUse() {
+                return FemboyEntity.this.defender && FemboyEntity.this.angerTicks <= 0
+                        && FemboyEntity.this.pocket.size() < POCKET_MAX
+                        && FemboyEntity.this.getHealth() >= FemboyEntity.this.getMaxHealth() * 0.8F
+                        && super.canUse();
+            }
+        });
     }
 
     @Override
@@ -191,6 +234,12 @@ public class FemboyEntity extends CreatureEntity {
             list.add(c);
         }
         tag.put("Distrusted", list);
+        tag.putBoolean("Defender", this.defender);
+        ListNBT pocketList = new ListNBT();
+        for (ItemStack stack : this.pocket) {
+            pocketList.add(stack.save(new CompoundNBT()));
+        }
+        tag.put("Pocket", pocketList);
     }
 
     @Override
@@ -215,6 +264,15 @@ public class FemboyEntity extends CreatureEntity {
         for (int i = 0; i < list.size(); i++) {
             CompoundNBT c = list.getCompound(i);
             this.distrusted.put(c.getUUID("Id"), c.getLong("Until"));
+        }
+        this.defender = tag.getBoolean("Defender");
+        this.pocket.clear();
+        ListNBT pocketList = tag.getList("Pocket", 10);
+        for (int i = 0; i < pocketList.size(); i++) {
+            ItemStack stack = ItemStack.of(pocketList.getCompound(i));
+            if (!stack.isEmpty()) {
+                this.pocket.add(stack);
+            }
         }
         this.syncAnger();
     }
@@ -258,6 +316,11 @@ public class FemboyEntity extends CreatureEntity {
         }
         this.setVariant(variant);
         this.setCoat(this.rollCoat());
+        this.defender = this.random.nextInt(100) < (variant == VARIANT_BLACK ? 25 : 60);
+        if (this.defender) {
+            this.setItemSlot(EquipmentSlotType.MAINHAND, new ItemStack(Items.WOODEN_SWORD));
+        }
+        this.rollPocket();
         return super.finalizeSpawn(world, difficulty, reason, data, tag);
     }
 
@@ -284,6 +347,16 @@ public class FemboyEntity extends CreatureEntity {
                 }
             }
         }
+        if (this.tickCount % 40 == 0 && this.getHealth() < this.getMaxHealth() * 0.6F
+                && this.getTarget() == null && this.tickCount - this.lastHurtTick > 100) {
+            PlayerEntity nearest = this.level.getNearestPlayer(this, 16.0D);
+            if (this.angerTicks <= 0 || nearest == null) {
+                ItemStack food = this.takeFood();
+                if (!food.isEmpty()) {
+                    this.consume(food);
+                }
+            }
+        }
         if (this.tickCount % 20 == 0) {
             PlayerEntity near = this.level.getNearestPlayer(this, 10.0D);
             if (near != null) {
@@ -295,6 +368,9 @@ public class FemboyEntity extends CreatureEntity {
     @Override
     public boolean hurt(DamageSource source, float amount) {
         boolean result = super.hurt(source, amount);
+        if (result) {
+            this.lastHurtTick = this.tickCount;
+        }
         if (result && !this.level.isClientSide && this.isAlive() && source.getEntity() instanceof PlayerEntity) {
             PlayerEntity attacker = (PlayerEntity) source.getEntity();
             this.attackPause = 0;
@@ -332,7 +408,8 @@ public class FemboyEntity extends CreatureEntity {
         this.angerTicks = 0;
         this.ignoreClicks = 0;
         this.setTarget(null);
-        this.setItemSlot(EquipmentSlotType.MAINHAND, ItemStack.EMPTY);
+        this.setItemSlot(EquipmentSlotType.MAINHAND,
+                this.defender ? new ItemStack(Items.WOODEN_SWORD) : ItemStack.EMPTY);
         if (full) {
             this.calmPoints = 0;
             this.ignoring = false;
@@ -500,6 +577,7 @@ public class FemboyEntity extends CreatureEntity {
         Vector3d flat = new Vector3d(dir.x, 0.0D, dir.z).normalize().scale(0.25D);
         item.setDeltaMovement(flat.x, 0.2D, flat.z);
         item.setPickUpDelay(20);
+        item.getPersistentData().putBoolean("FemboyGift", true);
         this.level.addFreshEntity(item);
     }
 
@@ -547,10 +625,162 @@ public class FemboyEntity extends CreatureEntity {
         if (this.random.nextDouble() < 0.20D * boost) {
             this.spawnAtLocation(new ItemStack(ModItems.paws(v)));
         }
+        for (ItemStack stack : this.pocket) {
+            this.spawnAtLocation(stack);
+        }
+        this.pocket.clear();
     }
 
     @Override
     public IPacket<?> getAddEntityPacket() {
         return NetworkHooks.getEntitySpawningPacket(this);
+    }
+
+    private void rollPocket() {
+        this.pocket.clear();
+        int r = this.random.nextInt(100);
+        int count = r < 30 ? 0 : r < 65 ? 1 : r < 82 ? 2 : r < 92 ? 3 : r < 98 ? 4 : 5;
+        Item[] foods = {Items.BREAD, Items.COOKED_CHICKEN, Items.COOKED_BEEF, Items.COOKED_PORKCHOP,
+                Items.CARROT, Items.APPLE, Items.BAKED_POTATO, Items.COOKED_COD};
+        for (int i = 0; i < count; i++) {
+            this.pocket.add(new ItemStack(foods[this.random.nextInt(foods.length)]));
+        }
+    }
+
+    private ItemStack takeFood() {
+        for (int i = 0; i < this.pocket.size(); i++) {
+            ItemStack stack = this.pocket.get(i);
+            if (stack.getItem().isEdible()) {
+                this.pocket.remove(i);
+                return stack;
+            }
+        }
+        return ItemStack.EMPTY;
+    }
+
+    private boolean hasFood() {
+        for (ItemStack stack : this.pocket) {
+            if (stack.getItem().isEdible()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void consume(ItemStack food) {
+        Food properties = food.getItem().getFoodProperties();
+        float amount = properties != null ? properties.getNutrition() : 2.0F;
+        this.heal(amount);
+        this.playSound(SoundEvents.GENERIC_EAT, 0.8F, 1.0F);
+    }
+
+    private static boolean wantsItem(ItemEntity entity) {
+        if (!entity.isAlive() || entity.getPersistentData().getBoolean("FemboyGift")) {
+            return false;
+        }
+        Item item = entity.getItem().getItem();
+        if (item == Items.ROTTEN_FLESH || item == Items.SPIDER_EYE || item == Items.PUFFERFISH
+                || item == Items.POISONOUS_POTATO) {
+            return false;
+        }
+        return item.isEdible() || item == Items.FEATHER || item == Items.RABBIT_HIDE
+                || item == Items.RABBIT_FOOT;
+    }
+
+    private class PickupItemsGoal extends Goal {
+        private ItemEntity target;
+
+        PickupItemsGoal() {
+            this.setFlags(EnumSet.of(Goal.Flag.MOVE));
+        }
+
+        @Override
+        public boolean canUse() {
+            FemboyEntity me = FemboyEntity.this;
+            if (me.pocket.size() >= POCKET_MAX || me.getTarget() != null || me.angerTicks > 0
+                    || me.tickCount % 10 != 0) {
+                return false;
+            }
+            List<ItemEntity> items = me.level.getEntitiesOfClass(ItemEntity.class,
+                    me.getBoundingBox().inflate(8.0D, 2.0D, 8.0D), FemboyEntity::wantsItem);
+            if (items.isEmpty()) {
+                return false;
+            }
+            this.target = items.get(0);
+            return true;
+        }
+
+        @Override
+        public boolean canContinueToUse() {
+            FemboyEntity me = FemboyEntity.this;
+            return this.target != null && this.target.isAlive() && me.pocket.size() < POCKET_MAX
+                    && me.getTarget() == null;
+        }
+
+        @Override
+        public void tick() {
+            FemboyEntity me = FemboyEntity.this;
+            me.getNavigation().moveTo(this.target, 1.0D);
+            if (me.distanceToSqr(this.target) < 2.5D) {
+                ItemStack stack = this.target.getItem();
+                int take = Math.min(POCKET_MAX - me.pocket.size(), stack.getCount());
+                for (int i = 0; i < take; i++) {
+                    me.pocket.add(new ItemStack(stack.getItem()));
+                }
+                stack.shrink(take);
+                if (stack.isEmpty()) {
+                    this.target.remove();
+                } else {
+                    this.target.setItem(stack);
+                }
+                this.target = null;
+            }
+        }
+    }
+
+    private class HealFriendGoal extends Goal {
+        private FemboyEntity friend;
+
+        HealFriendGoal() {
+            this.setFlags(EnumSet.of(Goal.Flag.MOVE));
+        }
+
+        @Override
+        public boolean canUse() {
+            FemboyEntity me = FemboyEntity.this;
+            if (!me.hasFood() || me.getTarget() != null || me.angerTicks > 0 || me.tickCount % 20 != 0) {
+                return false;
+            }
+            List<FemboyEntity> hurt = me.level.getEntitiesOfClass(FemboyEntity.class,
+                    me.getBoundingBox().inflate(10.0D),
+                    f -> f != me && f.isAlive() && f.getTarget() == null
+                            && f.getHealth() < f.getMaxHealth() * 0.5F);
+            if (hurt.isEmpty()) {
+                return false;
+            }
+            this.friend = hurt.get(0);
+            return true;
+        }
+
+        @Override
+        public boolean canContinueToUse() {
+            FemboyEntity me = FemboyEntity.this;
+            return this.friend != null && this.friend.isAlive() && me.hasFood() && me.getTarget() == null
+                    && this.friend.getHealth() < this.friend.getMaxHealth();
+        }
+
+        @Override
+        public void tick() {
+            FemboyEntity me = FemboyEntity.this;
+            me.getLookControl().setLookAt(this.friend, 30.0F, 30.0F);
+            me.getNavigation().moveTo(this.friend, 1.0D);
+            if (me.distanceToSqr(this.friend) < 4.0D) {
+                ItemStack food = me.takeFood();
+                if (!food.isEmpty()) {
+                    this.friend.consume(food);
+                }
+                this.friend = null;
+            }
+        }
     }
 }

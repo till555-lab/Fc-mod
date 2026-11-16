@@ -7,6 +7,10 @@ import com.femboycompanion.registry.ModItems;
 
 import net.minecraft.advancements.CriteriaTriggers;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.MobEntity;
+import net.minecraft.entity.ai.goal.NearestAttackableTargetGoal;
+import net.minecraft.entity.monster.AbstractSkeletonEntity;
+import net.minecraft.entity.monster.ZombieEntity;
 import net.minecraft.entity.EntityClassification;
 import net.minecraft.entity.EntitySpawnPlacementRegistry;
 import net.minecraft.entity.player.PlayerEntity;
@@ -17,6 +21,7 @@ import net.minecraft.world.biome.MobSpawnInfo;
 import net.minecraft.world.gen.Heightmap;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.entity.EntityAttributeCreationEvent;
+import net.minecraftforge.event.entity.EntityJoinWorldEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.world.BiomeLoadingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -40,6 +45,7 @@ public class FemboyCompanion {
         bus.addListener(this::onCommonSetup);
         MinecraftForge.EVENT_BUS.addListener(this::onBiomeLoading);
         MinecraftForge.EVENT_BUS.addListener(this::onLivingDeath);
+        MinecraftForge.EVENT_BUS.addListener(this::onEntityJoin);
         LOGGER.info("Femboy Companion loaded");
     }
 
@@ -91,6 +97,17 @@ public class FemboyCompanion {
             if (witness != dead) {
                 witness.distrust(killer.getUUID(), dead.level.getGameTime() + 12000L);
             }
+        }
+    }
+
+    private void onEntityJoin(EntityJoinWorldEvent event) {
+        if (event.getWorld().isClientSide) {
+            return;
+        }
+        Entity entity = event.getEntity();
+        if (entity instanceof ZombieEntity || entity instanceof AbstractSkeletonEntity) {
+            MobEntity mob = (MobEntity) entity;
+            mob.targetSelector.addGoal(4, new NearestAttackableTargetGoal<FemboyEntity>(mob, FemboyEntity.class, true));
         }
     }
 }

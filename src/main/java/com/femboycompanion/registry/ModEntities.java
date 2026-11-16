@@ -18,6 +18,7 @@ public class ModEntities {
     public static final RegistryObject<EntityType<FemboyEntity>> FEMBOY = ENTITIES.register("femboy",
             () -> EntityType.Builder.of(FemboyEntity::new, EntityClassification.CREATURE)
                     .sized(0.6F, 1.8F)
+                    .clientTrackingRange(4)
                     .build(new ResourceLocation(FemboyCompanion.MOD_ID, "femboy").toString()));
 
     public static void register(IEventBus bus) {
